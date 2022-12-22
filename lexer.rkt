@@ -17,7 +17,7 @@
     [(from/stop-before "//" "\n") (token lexeme #:skip? #t)]
     ;; keywords
     [(:or "module" "endmodule" "input" "output"
-      "(" ")" ";" "," "+" "-" "/" "*") (token lexeme lexeme)]
+      "(" ")" ";" "," "+" "-" "/" "*" "=") (token lexeme lexeme)]
     ;; float and integer constants
     [(:seq (:? "-") digits (:? (:seq "." digits)))
       (token 'CONSTANT (string->number lexeme))]

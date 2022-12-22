@@ -43,7 +43,7 @@
 
 (define keywords
   '("module" "endmodule" "input" "output"
-    "(" ")" ";" "," "+" "-" "/" "*"))
+    "(" ")" ";" "," "+" "-" "/" "*" "="))
 
 (for
   ([keyword keywords])
