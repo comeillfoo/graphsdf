@@ -1,5 +1,5 @@
 #lang br
-(require "lexer.rkt" brag/support rackunit)
+(require "../lexer.rkt" brag/support rackunit)
 
 
 (define (lex str)

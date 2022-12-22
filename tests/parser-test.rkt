@@ -1,5 +1,5 @@
 #lang br
-(require "parser.rkt" "tokenizer.rkt" brag/support)
+(require "../parser.rkt" "../tokenizer.rkt" brag/support)
 
 (define program #<<HERE
 a = 2.5 * c
