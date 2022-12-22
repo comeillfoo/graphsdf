@@ -10,11 +10,10 @@
 
 (define sdf-lexer
   (lexer-srcloc
-    ["\n" (token 'NEWLINE lexeme)]
     ;; blank symbols
     [whitespace (token lexeme #:skip? #t)]
     ;; comments
-    [(from/stop-before "//" "\n") (token lexeme #:skip? #t)]
+    [(from/to "//" "\n") (token lexeme #:skip? #t)]
     ;; keywords
     [(:or "module" "endmodule" "input" "output"
       "(" ")" ";" "," "+" "-" "/" "*" "=") (token lexeme lexeme)]

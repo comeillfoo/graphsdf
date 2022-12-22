@@ -36,10 +36,8 @@
 
 (check-equal?
  (lex "// keyword module ignored\n")
- (list (srcloc-token (token "// keyword module ignored" #:skip? #t)
-                     (srcloc 'string 1 0 1 25))
-       (srcloc-token (token 'NEWLINE "\n")
-                     (srcloc 'string 1 25 26 1))))
+ (list (srcloc-token (token "// keyword module ignored\n" #:skip? #t)
+                     (srcloc 'string 1 0 1 26))))
 
 (define keywords
   '("module" "endmodule" "input" "output"
