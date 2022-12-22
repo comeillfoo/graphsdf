@@ -4,9 +4,7 @@ sdf-program : statement-or-module-definition*
 
 statement-or-module-definition : statement | module-definition
 
-module-definition : "module" IDENTIFIER "(" ports ")" ";"
-  statement+
-  "endmodule"
+module-definition : "module" IDENTIFIER "(" ports ")" ";" statement+ "endmodule"
 
 ports : output-port | input-port "," ports
 
