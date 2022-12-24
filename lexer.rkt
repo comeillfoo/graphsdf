@@ -1,12 +1,16 @@
 #lang br
 (require brag/support)
 
-(define-lex-abbrev digits (:+ (char-set "0123456789")))
+(define-lex-abbrev digit (char-set "0123456789"))
+(define-lex-abbrev digits (:+ digit))
 
 (define-lex-abbrev lower-latin (char-set "abcdefghijklmnopqrstuvwxyz"))
 (define-lex-abbrev upper-latin (char-set "ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
 
-(define-lex-abbrev nondigits (:+ (:or lower-latin upper-latin "_")))
+(define-lex-abbrev nondigit (:or lower-latin upper-latin "_"))
+
+(define-lex-abbrev word (:or nondigit digit))
+
 
 (define sdf-lexer
   (lexer-srcloc
@@ -21,7 +25,7 @@
     [(:seq (:? "-") digits (:? (:seq "." digits)))
       (token 'CONSTANT (string->number lexeme))]
     ;; identifiers
-    [(:seq nondigits (:? digits))
+    [(:seq nondigit (:* word))
       (token 'IDENTIFIER lexeme)]))
 
 (provide sdf-lexer)

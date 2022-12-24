@@ -39,30 +39,24 @@
  (list (srcloc-token (token "// keyword module ignored\n" #:skip? #t)
                      (srcloc 'string 1 0 1 26))))
 
-(define keywords
-  '("module" "endmodule" "input" "output"
-    "(" ")" ";" "," "+" "-" "/" "*" "="))
 
 (for
-  ([keyword keywords])
+  ([keyword '("module" "endmodule" "input" "output"
+    "(" ")" ";" "," "+" "-" "/" "*" "=")])
   (apply
     check-equal?
     (test-data-keyword keyword)))
 
-(define constants
-  '("0" "1" "2" "10" "152" "12.53" "0.2556" "-0" "-1" "-83.54"))
 
 (for
-  ([constant constants])
+  ([constant '("0" "1" "2" "10" "152" "12.53" "0.2556" "-0" "-1" "-83.54")])
   (apply
     check-equal?
     (test-data-constant constant)))
 
-(define identifiers
-  '("a" "b" "_hello" "_1" "_aasdfd4564654" "threads2"))
 
 (for
-  ([identifier identifiers])
+  ([identifier '("a" "b" "_hello" "_1" "_aasdfd4564654" "threads2" "_2_3_4_5")])
   (apply
     check-equal?
     (test-data-identifier identifier)))
