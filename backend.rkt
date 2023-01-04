@@ -22,9 +22,6 @@
   filepath))
 
 
-
-
-
 (define/contract (node->type node-number topology-matrix)
   (-> exact-integer? vector? symbol?)
   (let*
@@ -34,12 +31,55 @@
     (match
       (list produces consumes)
       [(list #t #t) 'inout]
-      [(list #t #f) 'in]
-      [(list #f #t) 'out]
+      [(list #t #f) 'out]
+      [(list #f #t) 'in]
       [_ 'undef])))
 
 (struct node (type value) #:transparent)
 
+
+(define/contract (node-type? n type)
+  (-> node? symbol? boolean?)
+  (symbol=? (node-type n) type))
+
+(define (node-in? n)
+  (node-type? n 'in))
+
+(define (node-out? n)
+  (node-type? n 'out))
+
+(define (node-inout? n)
+  (node-type? n 'inout))
+
+
+(define/contract (node->string id node)
+  (-> exact-integer? node? string?)
+  (string-append
+    "g"
+    (number->string id)
+    " [label="
+    "\""
+    (let ([value (node-value node)])
+      (match value
+        [(? symbol?) (symbol->string value)]
+        [(? number?) (number->string value)]
+        [(? string?) value]))
+    "\""
+    "]"))
+
+
+(define (string-append-with-newline str ...)
+  (string-append str "\n" ...))
+
+
+(define/contract (build-graph nodes topology-matrix)
+  (-> (listof node?) vector? string?)
+  (let
+    ([in (filter node-in? nodes)]
+     [out (filter node-out? nodes)]
+     [inout (filter node-inout? nodes)]
+     [next-node-id 0])
+    (foldr string-append-with-newline "" (map node->string (range (length nodes)) nodes))))
 
 (module+ test
   ;; Any code in this `test` submodule runs when this file is run using DrRacket
@@ -63,11 +103,9 @@
         ([column (string-split row)])
         (string->number column))))
 
-  (define nodes (vector-length topology-matrix))
-
-  (define nodes-list
+  (define nodes
     (for/list
-      ([idx (in-range nodes)])
+      ([idx (in-range (vector-length topology-matrix))])
       (let
         ([raw-node (read-line in)]
          [type (node->type idx topology-matrix)])
@@ -75,14 +113,17 @@
         (node
           type
           (match raw-node
-            ["add" +]
-            ["sub" -]
-            ["mul" *]
-            ["div" /]
+            ["add" '+]
+            ["sub" '-]
+            ["mul" '*]
+            ["div" '/]
             [(pregexp #px"imm\\s{1,}(-{,1}\\d{1,}(\\.\\d{1,}){,1})" (list _ raw-imm _))
             (string->number raw-imm)]
             [(pregexp #px"val\\s{1,}([[:alpha:]_]{1}\\w{0,})" (list _ raw-val))
-            (string->symbol raw-val)])))))
+            raw-val])))))
 
   (close-input-port in)
-  nodes-list)
+
+  (if (is-graph)
+    (displayln (build-graph nodes topology-matrix))
+    nodes))
