@@ -178,10 +178,10 @@
           idx
           type
           (match raw-node
-            ["add" '+]
-            ["sub" '-]
-            ["mul" '*]
-            ["div" '/]
+            ["add" +]
+            ["sub" -]
+            ["mul" *]
+            ["div" /]
             [(pregexp #px"imm\\s{1,}(-{,1}\\d{1,}(\\.\\d{1,}){,1})" (list _ raw-imm _))
             (string->number raw-imm)]
             [(pregexp #px"val\\s{1,}([[:alpha:]_]{1}\\w{0,})" (list _ raw-val))
