@@ -23,7 +23,7 @@
 
 
 (define/contract (node->type node-number topology-matrix)
-  (-> exact-integer? vector? symbol?)
+  (-> exact-integer? (vectorof (vectorof exact-integer?)) symbol?)
   (let*
     ([row (vector-ref topology-matrix node-number)]
      [produces (> (vector-count positive-integer? row) 0)]
@@ -31,25 +31,11 @@
     (match
       (list produces consumes)
       [(list #t #t) 'inout]
-      [(list #t #f) 'out]
-      [(list #f #t) 'in]
+      [(list #t #f) 'in]
+      [(list #f #t) 'out]
       [_ 'undef])))
 
 (struct node (type value) #:transparent)
-
-
-(define/contract (node-type? n type)
-  (-> node? symbol? boolean?)
-  (symbol=? (node-type n) type))
-
-(define (node-in? n)
-  (node-type? n 'in))
-
-(define (node-out? n)
-  (node-type? n 'out))
-
-(define (node-inout? n)
-  (node-type? n 'inout))
 
 
 (define/contract (node->string id node)
@@ -57,29 +43,71 @@
   (string-append
     "g"
     (number->string id)
-    " [label="
-    "\""
-    (let ([value (node-value node)])
+    " [label=\""
+    (let
+      ([value (node-value node)])
       (match value
         [(? symbol?) (symbol->string value)]
         [(? number?) (number->string value)]
         [(? string?) value]))
-    "\""
-    "]"))
-
+    "\"]"))
 
 (define (string-append-with-newline str ...)
   (string-append str "\n" ...))
 
 
-(define/contract (build-graph nodes topology-matrix)
-  (-> (listof node?) vector? string?)
-  (let
-    ([in (filter node-in? nodes)]
-     [out (filter node-out? nodes)]
-     [inout (filter node-inout? nodes)]
-     [next-node-id 0])
-    (foldr string-append-with-newline "" (map node->string (range (length nodes)) nodes))))
+(struct queue (in out tokens) #:transparent)
+
+(define/contract (queue->string queue)
+  (queue? . -> . string?)
+  (string-append
+    "g"
+    (number->string (queue-in queue))
+    " -> g"
+    (number->string (queue-out queue))
+    " [label=\""
+    (number->string (queue-tokens queue))
+    "\"]"))
+
+
+(define/contract (build-graph nodes queues)
+  (-> (listof node?) (listof queue?) string?)
+  (string-append
+    "digraph G {\n"
+    (foldr
+      string-append-with-newline
+      ""
+      (map
+        node->string
+        (range (length nodes))
+        nodes))
+    (foldr
+      string-append-with-newline
+      ""
+      (map
+        queue->string
+        queues))
+    "}"))
+
+
+(define/contract (matrix->queues/list topology-matrix)
+  ((vectorof (vectorof exact-integer?)) . -> . (listof queue?))
+  (let*
+    ([queues (vector-length (vector-ref topology-matrix 0))]
+     [raw-queues
+      (for/vector
+        ([index (range queues)])
+        (vector-map
+          (lambda
+            (vec)
+            (vector-ref vec index))
+          topology-matrix))])
+    (for/list
+      ([raw-queue raw-queues])
+      (let*
+        ([input-node (index-where (vector->list raw-queue) positive-integer?)]
+         [output-node (index-where (vector->list raw-queue) negative-integer?)])
+        (queue input-node output-node (vector-ref raw-queue input-node))))))
 
 (module+ test
   ;; Any code in this `test` submodule runs when this file is run using DrRacket
@@ -124,6 +152,11 @@
 
   (close-input-port in)
 
+  (define queues (matrix->queues/list topology-matrix))
+
   (if (is-graph)
-    (displayln (build-graph nodes topology-matrix))
-    nodes))
+    (displayln
+      (build-graph
+        nodes
+        queues))
+    (values nodes queues)))
