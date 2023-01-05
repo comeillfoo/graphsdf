@@ -3,24 +3,8 @@
 (module+ test
   (require rackunit))
 
-;; Code here
-(require racket/cmdline)
-
-(define is-graph
-  (make-parameter
-    #f
-    boolean?))
-
-
-(define sdfir-file
-  (command-line
-  #:program "backend"
-  #:once-each
-  [("-g" "--graph") "Builds only graph in .dot format" (is-graph #t)]
-  #:args (filepath) ; expect one command-line argument: <filepath>
-  ; return the argument as a filepath to compile
-  filepath))
-
+(module+ main
+  (require racket/cmdline))
 
 (define/contract (node->type node-number topology-matrix)
   (-> exact-integer? (vectorof (vectorof exact-integer?)) symbol?)
@@ -35,28 +19,35 @@
       [(list #f #t) 'out]
       [_ 'undef])))
 
-(struct node (type value) #:transparent)
+(struct node (id type value) #:transparent)
 
+(define procedures
+  (hash
+    + "+"
+    - "-"
+    * "*"
+    / "/"))
 
-(define/contract (node->string id node)
-  (-> exact-integer? node? string?)
+(define/contract (node->string node)
+  (node? . -> . string?)
   (string-append
     "g"
-    (number->string id)
+    (number->string (node-id node))
     " [label=\""
     (let
       ([value (node-value node)])
       (match value
-        [(? symbol?) (symbol->string value)]
+        [(? procedure?) (hash-ref procedures value "undefined")]
         [(? number?) (number->string value)]
         [(? string?) value]))
     "\"]"))
+
 
 (define (string-append-with-newline str ...)
   (string-append str "\n" ...))
 
 
-(struct queue (in out tokens) #:transparent)
+(struct queue (in out capacity tokens) #:transparent)
 
 (define/contract (queue->string queue)
   (queue? . -> . string?)
@@ -66,8 +57,39 @@
     " -> g"
     (number->string (queue-out queue))
     " [label=\""
-    (number->string (queue-tokens queue))
+    (number->string (queue-capacity queue))
     "\"]"))
+
+
+(define/contract (fires? node queues)
+  (node? (listof queue?) . -> . boolean?)
+  (let*
+    ([id (node-id node)]
+     [input (filter (lambda (q) (= (queue-in q) id)) queues)]
+     [output (filter (lambda (q) (= (queue-out q) id)) queues)])
+    (and
+      (map
+        (lambda (q)
+          (=
+            (length (queue-tokens q))
+            (queue-capacity q)))
+        input)
+      (map
+        (lambda (q)
+          (<
+            (length (queue-tokens q))
+            (queue-capacity q)))
+        output))))
+
+
+(define (fire node [inputs null])
+  (list
+    (let
+      ([value (node-value node)])
+      (match value
+        [(? string?) (begin (printf "Enter ~a value: " ) (string->number (read-line)))]
+        [(? number?) value]
+        [(? procedure?) (apply value inputs)]))))
 
 
 (define/contract (build-graph nodes queues)
@@ -79,7 +101,6 @@
       ""
       (map
         node->string
-        (range (length nodes))
         nodes))
     (foldr
       string-append-with-newline
@@ -107,13 +128,14 @@
       (let*
         ([input-node (index-where (vector->list raw-queue) positive-integer?)]
          [output-node (index-where (vector->list raw-queue) negative-integer?)])
-        (queue input-node output-node (vector-ref raw-queue input-node))))))
+        (queue input-node output-node (vector-ref raw-queue input-node) null)))))
 
 (module+ test
   ;; Any code in this `test` submodule runs when this file is run using DrRacket
   ;; or with `raco test`. The code here does not run when this file is
   ;; required by another module.
-  (void))
+  (check-equal? (fire (node 0 'out 8)) '(8))
+  (check-equal? (fire (node 0 'out -) '(8 5)) '(3)))
 
 
 (module+ main
@@ -121,6 +143,20 @@
   ;; this file is run using DrRacket or the `racket` executable.  The code here
   ;; does not run when this file is required by another module. Documentation:
   ;; http://docs.racket-lang.org/guide/Module_Syntax.html#%28part._main-and-test%29
+  (define is-graph
+    (make-parameter
+      #f
+      boolean?))
+
+  (define sdfir-file
+    (command-line
+    #:program "backend"
+    #:once-each
+    [("-g" "--graph") "Builds only graph in .dot format" (is-graph #t)]
+    #:args (filepath) ; expect one command-line argument: <filepath>
+    ; return the argument as a filepath to compile
+    filepath))
+
   (define in (open-input-file sdfir-file #:mode 'text))
 
   (define topology-matrix
@@ -139,6 +175,7 @@
          [type (node->type idx topology-matrix)])
 
         (node
+          idx
           type
           (match raw-node
             ["add" '+]
