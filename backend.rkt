@@ -47,7 +47,7 @@
   (string-append str "\n" ...))
 
 
-(struct queue (in out capacity tokens) #:transparent)
+(struct queue (id in out capacity [tokens #:mutable]) #:transparent)
 
 (define/contract (queue->string queue)
   (queue? . -> . string?)
@@ -61,20 +61,37 @@
     "\"]"))
 
 
-(define/contract (fires? node queues)
-  (node? (listof queue?) . -> . boolean?)
-  (let*
-    ([id (node-id node)]
-     [input (filter (lambda (q) (= (queue-in q) id)) queues)]
-     [output (filter (lambda (q) (= (queue-out q) id)) queues)])
+(define/contract (queue-in? node queue)
+  (-> node? queue? boolean?)
+    (= (queue-out queue) (node-id node)))
+
+
+(define/contract (queue-out? node queue)
+  (-> node? queue? boolean?)
+    (= (queue-in queue) (node-id node)))
+
+
+(define/contract (queue-none? node queue)
+  (-> node? queue? boolean?)
+    (not
+      (or
+        (queue-in? node queue)
+        (queue-out? node queue))))
+
+
+(define/contract (fires? queues node)
+  ((listof queue?) node? . -> . boolean?)
+  (let
+    ([output (filter (curry queue-out? node) queues)]
+     [input (filter (curry queue-in? node) queues)])
     (and
-      (map
+      (andmap
         (lambda (q)
           (=
             (length (queue-tokens q))
             (queue-capacity q)))
         input)
-      (map
+      (andmap
         (lambda (q)
           (<
             (length (queue-tokens q))
@@ -87,7 +104,7 @@
     (let
       ([value (node-value node)])
       (match value
-        [(? string?) (begin (printf "Enter ~a value: " ) (string->number (read-line)))]
+        [(? string?) (begin (printf "Enter ~a value: " value) (string->number (read-line)))]
         [(? number?) value]
         [(? procedure?) (apply value inputs)]))))
 
@@ -114,21 +131,22 @@
 (define/contract (matrix->queues/list topology-matrix)
   ((vectorof (vectorof exact-integer?)) . -> . (listof queue?))
   (let*
-    ([queues (vector-length (vector-ref topology-matrix 0))]
-     [raw-queues
+    ([columns (vector-length (vector-ref topology-matrix 0))]
+     [queues
       (for/vector
-        ([index (range queues)])
+        ([index (range columns)])
         (vector-map
           (lambda
             (vec)
             (vector-ref vec index))
           topology-matrix))])
     (for/list
-      ([raw-queue raw-queues])
+      ([q queues]
+       [id (in-naturals)])
       (let*
-        ([input-node (index-where (vector->list raw-queue) positive-integer?)]
-         [output-node (index-where (vector->list raw-queue) negative-integer?)])
-        (queue input-node output-node (vector-ref raw-queue input-node) null)))))
+        ([input-node (index-where (vector->list q) positive-integer?)]
+         [output-node (index-where (vector->list q) negative-integer?)])
+        (queue id input-node output-node (vector-ref q input-node) null)))))
 
 (module+ test
   ;; Any code in this `test` submodule runs when this file is run using DrRacket
@@ -148,11 +166,17 @@
       #f
       boolean?))
 
+  (define firings
+    (make-parameter
+      1000
+      exact-integer?))
+
   (define sdfir-file
     (command-line
     #:program "backend"
     #:once-each
     [("-g" "--graph") "Builds only graph in .dot format" (is-graph #t)]
+    [("-f" "--firings") raw-firings "Upper limit for the number of firings" (firings (string->number raw-firings))]
     #:args (filepath) ; expect one command-line argument: <filepath>
     ; return the argument as a filepath to compile
     filepath))
@@ -196,4 +220,45 @@
       (build-graph
         nodes
         queues))
-    (values nodes queues)))
+    (for/or
+      ([turn (in-range (firings))])
+      (let*
+        ([fireable-nodes (filter (curry fires? queues) nodes)]
+         [finish? (empty? fireable-nodes)])
+        (unless
+          finish?
+          (let*
+            ([fire-node (first fireable-nodes)]
+             [queues-in (filter (curry queue-in? fire-node) queues)]
+             [queues-out (filter (curry queue-out? fire-node) queues)]
+             [queues-rest (filter (curry queue-none? fire-node) queues)]
+             [inputs (map (lambda (q) (first (queue-tokens q))) queues-in)]
+             [token (fire fire-node inputs)])
+            (if (empty? queues-out)
+              (println (first token))
+              ;; update output buffers
+              (set!
+                queues-out
+                (map
+                  (lambda (q) (set-queue-tokens! q (append token (queue-tokens q))) q)
+                  queues-out)))
+            ;; if there were inputs then update corresponding input buffers
+            (unless
+              (empty? inputs)
+              (set!
+                queues-in
+                (map
+                  (lambda (q) (set-queue-tokens! q (list-tail (queue-tokens q) 1)) q)
+                  queues-in)))
+            (set!
+              queues
+              (sort
+                (append
+                  queues-in
+                  queues-out
+                  queues-rest)
+                <
+                #:key (lambda (q) (queue-id q))))
+            (println queues)
+            (println nodes)))
+        finish?))))
