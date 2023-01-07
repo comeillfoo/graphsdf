@@ -19,7 +19,7 @@
       [(list #f #t) 'out]
       [_ 'undef])))
 
-(struct node (id type value) #:transparent)
+(struct node (id type value [fired #:mutable]) #:transparent)
 
 (define procedures
   (hash
@@ -96,7 +96,8 @@
           (<
             (length (queue-tokens q))
             (queue-capacity q)))
-        output))))
+        output)
+      (not (node-fired node)))))
 
 
 (define (fire node [inputs null])
@@ -171,12 +172,18 @@
       1000
       exact-integer?))
 
+  (define verbose
+    (make-parameter
+      #f
+      boolean?))
+
   (define sdfir-file
     (command-line
     #:program "backend"
     #:once-each
-    [("-g" "--graph") "Builds only graph in .dot format" (is-graph #t)]
-    [("-f" "--firings") raw-firings "Upper limit for the number of firings" (firings (string->number raw-firings))]
+    [("-g" "--graph") "Prints only graph in .dot format" (is-graph #t)]
+    [("-f" "--firings") raw-firings "Upper limit for the number of firings, default 1000" (firings (string->number raw-firings))]
+    [("-v" "--verbose") "Enables verbose output" (verbose #t)]
     #:args (filepath) ; expect one command-line argument: <filepath>
     ; return the argument as a filepath to compile
     filepath))
@@ -209,7 +216,8 @@
             [(pregexp #px"imm\\s{1,}(-{,1}\\d{1,}(\\.\\d{1,}){,1})" (list _ raw-imm _))
             (string->number raw-imm)]
             [(pregexp #px"val\\s{1,}([[:alpha:]_]{1}\\w{0,})" (list _ raw-val))
-            raw-val])))))
+            raw-val])
+          #f))))
 
   (close-input-port in)
 
@@ -220,45 +228,79 @@
       (build-graph
         nodes
         queues))
-    (for/or
-      ([turn (in-range (firings))])
-      (let*
-        ([fireable-nodes (filter (curry fires? queues) nodes)]
-         [finish? (empty? fireable-nodes)])
-        (unless
-          finish?
-          (let*
-            ([fire-node (first fireable-nodes)]
-             [queues-in (filter (curry queue-in? fire-node) queues)]
-             [queues-out (filter (curry queue-out? fire-node) queues)]
-             [queues-rest (filter (curry queue-none? fire-node) queues)]
-             [inputs (map (lambda (q) (first (queue-tokens q))) queues-in)]
-             [token (fire fire-node inputs)])
-            (if (empty? queues-out)
-              (println (first token))
-              ;; update output buffers
-              (set!
-                queues-out
-                (map
-                  (lambda (q) (set-queue-tokens! q (append token (queue-tokens q))) q)
-                  queues-out)))
-            ;; if there were inputs then update corresponding input buffers
-            (unless
-              (empty? inputs)
-              (set!
-                queues-in
-                (map
-                  (lambda (q) (set-queue-tokens! q (list-tail (queue-tokens q) 1)) q)
-                  queues-in)))
-            (set!
-              queues
-              (sort
-                (append
-                  queues-in
+    (begin
+      (for/or
+        ([turn (in-range (firings))])
+        (let*
+          ([fireable-nodes (filter (curry fires? queues) nodes)]
+          [finish? (empty? fireable-nodes)])
+          (unless
+            finish?
+            (when (verbose)
+              (printf "--- stage[~a/~a] ---~n" turn (firings))
+              (printf "queues:~n~a~n"
+                (string-join
+                  (map
+                    (lambda (q)
+                      (format
+                        "- [~a:~a->~a]: [~a]"
+                        (queue-id q)
+                        (queue-in q)
+                        (queue-out q)
+                        (string-join
+                          (map (lambda (token) (number->string token)) (queue-tokens q))
+                          ", ")))
+                    queues)
+                  "\n"))
+              (printf "nodes:~n~a~n"
+                (string-join
+                  (map
+                    (lambda
+                      (n)
+                      (let ([value (node-value n)])
+                        (format
+                          "- [~a]: ~a"
+                          (node-id n)
+                          (if (procedure? value)
+                            (hash-ref procedures value)
+                            value))))
+                    nodes)
+                  "\n")))
+            (let*
+              ([fire-node (first fireable-nodes)]
+              [queues-in (filter (curry queue-in? fire-node) queues)]
+              [queues-out (filter (curry queue-out? fire-node) queues)]
+              [queues-rest (filter (curry queue-none? fire-node) queues)]
+              [inputs (map (lambda (q) (first (queue-tokens q))) queues-in)]
+              [token (fire fire-node inputs)])
+              (if (empty? queues-out)
+                (println (first token))
+                ;; update output buffers
+                (set!
                   queues-out
-                  queues-rest)
-                <
-                #:key (lambda (q) (queue-id q))))
-            (println queues)
-            (println nodes)))
-        finish?))))
+                  (map
+                    (lambda (q) (set-queue-tokens! q (append token (queue-tokens q))) q)
+                    queues-out)))
+              ;; if there were inputs then update corresponding input buffers
+              (unless
+                (empty? inputs)
+                (set!
+                  queues-in
+                  (map
+                    (lambda (q) (set-queue-tokens! q (list-tail (queue-tokens q) 1)) q)
+                    queues-in)))
+              (set!
+                queues
+                (sort
+                  (append
+                    queues-in
+                    queues-out
+                    queues-rest)
+                  <
+                  #:key (lambda (q) (queue-id q))))
+              ;; mark val nodes as fired
+              (when (string? (node-value fire-node))
+                (set-node-fired! fire-node #t)
+                (set! nodes (list-set nodes (node-id fire-node) fire-node)))))
+          finish?))
+        (void))))
