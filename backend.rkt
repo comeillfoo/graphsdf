@@ -163,19 +163,13 @@
   ;; does not run when this file is required by another module. Documentation:
   ;; http://docs.racket-lang.org/guide/Module_Syntax.html#%28part._main-and-test%29
   (define is-graph
-    (make-parameter
-      #f
-      boolean?))
+    (make-parameter #f))
 
   (define firings
-    (make-parameter
-      1000
-      exact-integer?))
+    (make-parameter 1000))
 
   (define verbose
-    (make-parameter
-      #f
-      boolean?))
+    (make-parameter #f))
 
   (define sdfir-file
     (command-line
@@ -236,36 +230,6 @@
           [finish? (empty? fireable-nodes)])
           (unless
             finish?
-            (when (verbose)
-              (printf "--- stage[~a/~a] ---~n" turn (firings))
-              (printf "queues:~n~a~n"
-                (string-join
-                  (map
-                    (lambda (q)
-                      (format
-                        "- [~a:~a->~a]: [~a]"
-                        (queue-id q)
-                        (queue-in q)
-                        (queue-out q)
-                        (string-join
-                          (map (lambda (token) (number->string token)) (queue-tokens q))
-                          ", ")))
-                    queues)
-                  "\n"))
-              (printf "nodes:~n~a~n"
-                (string-join
-                  (map
-                    (lambda
-                      (n)
-                      (let ([value (node-value n)])
-                        (format
-                          "- [~a]: ~a"
-                          (node-id n)
-                          (if (procedure? value)
-                            (hash-ref procedures value)
-                            value))))
-                    nodes)
-                  "\n")))
             (let*
               ([fire-node (first fireable-nodes)]
               [queues-in (filter (curry queue-in? fire-node) queues)]
@@ -301,6 +265,39 @@
               ;; mark val nodes as fired
               (when (string? (node-value fire-node))
                 (set-node-fired! fire-node #t)
-                (set! nodes (list-set nodes (node-id fire-node) fire-node)))))
+                (set! nodes (list-set nodes (node-id fire-node) fire-node))))
+            (when (verbose)
+              (printf "--- stage[~a/~a] ---~n" turn (firings))
+              (printf "queues:~n~a~n"
+                (string-join
+                  (map
+                    (lambda (q)
+                      (format
+                        "- [~a:~a->~a]: [~a]"
+                        (queue-id q)
+                        (queue-in q)
+                        (queue-out q)
+                        (string-join
+                          (map (lambda (token) (number->string token)) (queue-tokens q))
+                          ", ")))
+                    queues)
+                  "\n"))
+              (printf "nodes:~n~a~n"
+                (string-join
+                  (map
+                    (lambda
+                      (n)
+                      (let ([value (node-value n)])
+                        (format
+                          "- [~a]: ~a"
+                          (node-id n)
+                          (if (procedure? value)
+                            (string-append
+                              "("
+                              (hash-ref procedures value)
+                              ")")
+                            value))))
+                    nodes)
+                  "\n"))))
           finish?))
         (void))))
