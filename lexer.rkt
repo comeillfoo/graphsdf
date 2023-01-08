@@ -11,7 +11,7 @@
 
 (define-lex-abbrev word (:or nondigit digit))
 
-(define sdf-lexer
+(define gsdf-lexer
   (lexer-srcloc
    ;; blank symbols
    [whitespace (token lexeme #:skip? #t)]
@@ -25,4 +25,4 @@
    ;; identifiers
    [(:seq nondigit (:* word)) (token 'IDENTIFIER lexeme)]))
 
-(provide sdf-lexer)
+(provide gsdf-lexer)

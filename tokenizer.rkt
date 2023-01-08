@@ -6,7 +6,7 @@
   (port-count-lines! ip)
   (lexer-file-path path)
   (define (next-token)
-    (sdf-lexer ip))
+    (gsdf-lexer ip))
   next-token)
 
 (provide make-tokenizer)

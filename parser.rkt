@@ -1,6 +1,6 @@
 #lang brag
 
-sdf-program : statement-or-module-definition*
+gsdf-program : statement-or-module-definition*
 
 statement-or-module-definition : statement | module-definition
 
