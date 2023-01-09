@@ -1,117 +1,130 @@
 #lang br/quicklang
 
-(require racket/contract)
+(require racket/contract racket/generator)
 
-(struct queue (input-id output-id) #:transparent)
-(struct node (id type value) #:transparent)
-(struct gmod (name queues nodes [submods #:mutable] args) #:transparent)
+(define (undefined-op op)
+  (error 'op "operation ~a unknown~n" op))
 
-(define todo (curry error "todo!"))
+(struct queue (id in out) #:transparent)
+(struct node (id value) #:transparent)
+
+(define next-node-id
+  (sequence->generator (in-naturals)))
+
+(define next-queue-id
+  (sequence->generator (in-naturals)))
 
 
 (define-macro (gsdf-module-begin PARSE-TREE)
   #'(#%module-begin
-     'PARSE-TREE))
+     PARSE-TREE))
 (provide (rename-out [gsdf-module-begin #%module-begin]))
 
 
-(define-macro (gsdf-program STMT-OR-MOD ...)
-  #'(begin
-      (define root (fold-program (list STMT-OR-MOD ...)))
-      ;; convert root module to IR
-      ""))
+(define-macro (gsdf-program STATEMENTS ...)
+  #'(let-values
+    ([(nodes queues) (fold-program (list STATEMENTS ...))])
+    (void (build-ir nodes queues))))
 (provide gsdf-program)
 
 
-(define/contract (fold-program stmts-or-mods)
-  (list? . -> . gmod?)
+(define operations
+  (hash
+    + "add"
+    - "sub"
+    * "mul"
+    / "div"))
+
+
+(define (build-ir nodes queues)
+  (let
+    ([nodes (sort (hash-values nodes) < #:key node-id)])
+    (for
+      ([n nodes])
+      (for
+        ([q queues])
+        (let
+          ([id (node-id n)]
+           [in (queue-in q)]
+           [out (queue-out q)])
+          (printf
+            (~a
+              #:align 'right
+              #:min-width 3
+              (cond
+                [(= in  id)   1]
+                [(= out id)  -1]
+                [else         0])))))
+      (newline))
+    (newline)
+    (for
+      ([n nodes])
+      (printf
+        (match (node-value n)
+          [(? procedure? op) (format "~a~n" (hash-ref operations op (lambda (op) (undefined-op op))))]
+          [(? number? constant) (format "imm ~a~n" constant)]
+          [(? string? identifier) (format "val ~a~n" identifier)])))))
+
+(define/contract (fold-program statements)
+  ((listof procedure?) . -> . (values hash? (listof queue?)))
   (for/fold
-    ([root (gmod "root" null (hash) (hash) null)])
-    ([stmt-or-mod (in-list stmts-or-mods)])
-    (stmt-or-mod root)))
+    ([nodes (hash)]
+     [queues null])
+    ([stmt (in-list statements)])
+    (stmt nodes queues)))
 
 
-(define-macro
-  (module-definition
-    "module"
-    MODULE-NAME
-    "("
-    INPUT-OR-OUTPUT-PORT0
-    INPUT-OR-OUTPUT-PORTS ...
-    ")"
-    ";"
-    STMT0
-    STMTS ...
-    "endmodule")
-  #'(lambda (parent)
-      (let*
-        ([submods (gmod-submods parent)]
-         [ports   (list INPUT-OR-OUTPUT-PORT0 INPUT-OR-OUTPUT-PORTS ...)]
-         [inputs  (map cdr (filter (lambda (p) (string=? (car p) "input")) ports))]
-         [outputs (map cdr (filter (lambda (p) (string=? (car p) "output")) ports))]
-         [submod  (gmod MODULE-NAME null (hash) (hash) ports)]
-         [statements (reverse (list STMT0 STMTS ...))])
-        (when
-          (hash-has-key? submods MODULE-NAME)
-          (error 'module-definition "module ~a is already defined~n" MODULE-NAME))
-        (when
-          (empty? outputs)
-          (error 'module-definition "no output ports in module ~a provided~n" MODULE-NAME))
-        ;; process statements
-        (set! submod ((apply compose1 statements) parent submod))
-        ;; add new submodule to submodules
-        (set-gmod-submods! parent (hash-set submods MODULE-NAME submod))
-        parent)))
-(provide module-definition)
-
-
-(define-macro (input-or-output-port TYPE PORT-NAME)
-  #'(cons TYPE PORT-NAME))
-(provide input-or-output-port)
-
-
-(define-macro (statement ASSIGN-OR-MODULE-INV)
-  #'(lambda (mod)
-      ;; modify "mod"
-      (ASSIGN-OR-MODULE-INV mod)
-      mod))
+(define-macro (statement ASSIGNMENT)
+  #'(lambda (nodes queues)
+      (ASSIGNMENT nodes queues)))
 (provide statement)
-
-
-(define-macro (module-invocation MODULE-NAME "(" ARG0 ARGS ... ")")
-  #'(lambda (mod)
-      (let*
-        ([submodules (gmod-submods mod)]
-         [args (list ARG0 ARGS ...)])
-        (if (hash-has-key? submodules MODULE-NAME)
-          (let*
-            ([submod (hash-ref submodules MODULE-NAME)]
-             [submod-arity (length (gmod-args submod))])
-            (if (= (length args) submod-arity)
-              (begin
-                ;; modify mod
-                mod)
-              (raise-arity-error (string->symbol MODULE-NAME) submod-arity ARG0 ARGS ...)))
-          (error 'module-invocation "module \"~a\" is not defined~n" MODULE-NAME)))))
-(provide module-invocation)
 
 
 (define-macro (assignment IDENTIFIER "=" EXPRESSION)
   #'(lambda
-      (queues nodes)
+      (nodes queues)
+      ; test if value already assigned
       (when (hash-has-key? nodes IDENTIFIER)
         (error 'assignment "name ~a already in use~n" IDENTIFIER))
-      (let
-        ([op (car EXPRESSION)]
-         [args (cdr EXPRESSION)])
-        (match op
-          ['undef ]))
-      (values queues nodes)))
+      ; actual work
+      (let*
+        ([op   (car EXPRESSION)]
+         [args (cdr EXPRESSION)]
+         [existed-args (map (curry hash-ref nodes) (filter (lambda (arg) (hash-has-key? nodes arg)) args))]
+         [non-existed-args
+          (map
+            (lambda
+              (arg)
+              (node (next-node-id) arg))
+              (filter-not
+                (lambda (arg) (hash-has-key? nodes arg))
+                args))]
+         [acc-node
+          (node
+            (next-node-id)
+            op)]
+         [arg-ids (map node-id (append existed-args non-existed-args))]
+         [arg-queues
+          (map
+            (lambda (arg-id)
+              (queue (next-queue-id) arg-id (node-id acc-node)))
+              arg-ids)])
+        (values
+          (hash-set
+            (for/fold
+              ([updated-nodes nodes])
+              ([arg non-existed-args])
+              (hash-set
+                updated-nodes
+                (node-value arg) arg))
+            IDENTIFIER
+            acc-node)
+          (append queues arg-queues)))))
 (provide assignment)
 
 
 (define-macro-cases expr
-  [(expr VALUE) #'(cons 'undef (list VALUE))]
+  [(expr VALUE) #'(cons + (list VALUE))]
   [(expr OP VALUE) #'(cons OP (list VALUE))]
   [(expr VALUE1 OP VALUE2) #'(cons OP (list VALUE1 VALUE2))])
 (provide expr)
@@ -121,11 +134,19 @@
 (provide ident-or-const)
 
 
-(define-macro (unary-op OP)
-  #'(string->symbol OP))
+(define procedures
+  (hash
+    "-" -
+    "+" +
+    "*" *
+    "/" /))
+
+
+(define (unary-op op)
+  (hash-ref procedures op (lambda () (undefined-op op))))
 (provide unary-op)
 
 
-(define-macro (binary-op OP)
-  #'(string->symbol OP))
+(define (binary-op op)
+  (hash-ref procedures op (lambda () (undefined-op op))))
 (provide binary-op)

@@ -1,12 +1,18 @@
-#lang reader "reader.rkt"
-a = 2.5 * c
-b = a / -0.8
+#lang reader "../reader.rkt"
+// a = 2.5 * c
+// b = a / -0.8
 
-module transfer(input in1, input in2, output out);
-  out = in1 * in2
-endmodule
+// module transfer(input in1, input in2, output out);
+//  out = in1 * in2
+// endmodule
 
-d = a - b
+// d = a - b
 
-transfer(d, c, e)
-f = e + d
+// transfer(d, c, e)
+// f = e + d
+// g = f
+tmp0 = b
+tmp1 = tmp0 * b
+tmp2 = a * c
+tmp3 = -4 * tmp2
+D = tmp1 + tmp3

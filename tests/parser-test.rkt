@@ -8,13 +8,13 @@
 a = 2.5 * c
 b = a / -0.8
 
-module transfer(input in1, input in2, output out);
-  out = in1 * in2
-endmodule
+// module transfer(input in1, input in2, output out);
+//  out = in1 * in2
+// endmodule
 
 d = a - b
 
-transfer(d, c, e)
+// transfer(d, c, e)
 f = e + d
 g = -f
 

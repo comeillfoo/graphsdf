@@ -1,16 +1,16 @@
 #lang brag
 
-gsdf-program : statement-or-module-definition*
+gsdf-program : statement*
 
-statement-or-module-definition : statement | module-definition
+;;; statement-or-module-definition : statement | module-definition
 
-module-definition : "module" IDENTIFIER "(" input-output-port ("," input-output-port)* ")" ";" assignment+ "endmodule"
+;;; module-definition : "module" IDENTIFIER "(" input-output-port ("," input-output-port)* ")" ";" assignment+ "endmodule"
 
-input-output-port : ( "output" | "input" ) IDENTIFIER
+;;; input-output-port : ( "output" | "input" ) IDENTIFIER
 
-statement : assignment | module-invocation
+statement : assignment ;;; | module-invocation
 
-module-invocation : IDENTIFIER "(" IDENTIFIER ("," IDENTIFIER)* ")"
+;;; module-invocation : IDENTIFIER "(" IDENTIFIER ("," IDENTIFIER)* ")"
 
 assignment : IDENTIFIER "=" expr
 
