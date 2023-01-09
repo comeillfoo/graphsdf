@@ -16,6 +16,7 @@ d = a - b
 
 transfer(d, c, e)
 f = e + d
+g = -f
 
 HERE
   )

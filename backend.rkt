@@ -147,6 +147,8 @@
       (let*
         ([input-node (index-where (vector->list q) positive-integer?)]
          [output-node (index-where (vector->list q) negative-integer?)])
+        (unless input-node (error 'queues "no input node for queue[~a]~n" id))
+        (unless output-node (error 'queues "no output node for queue[~a]~n" id))
         (queue id input-node output-node (vector-ref q input-node) null)))))
 
 (module+ test
@@ -216,6 +218,13 @@
   (close-input-port in)
 
   (define queues (matrix->queues/list topology-matrix))
+
+  (for*
+    ([q0 queues] [q1 queues])
+    (and
+      (= (queue-in q0) (queue-out q1))
+      (= (queue-out q0) (queue-in q1))
+      (error 'queues "found simple loop between queue[~a] and queue[~a]" (queue-id q0) (queue-id q1))))
 
   (if (is-graph)
     (displayln

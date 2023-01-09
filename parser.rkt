@@ -4,19 +4,13 @@ gsdf-program : statement-or-module-definition*
 
 statement-or-module-definition : statement | module-definition
 
-module-definition : "module" IDENTIFIER "(" input-output-port ("," input-output-port)* ")" ";" statement+ "endmodule"
+module-definition : "module" IDENTIFIER "(" input-output-port ("," input-output-port)* ")" ";" assignment+ "endmodule"
 
-input-output-port : output-port | input-port
-
-input-port : "input" IDENTIFIER
-
-output-port : "output" IDENTIFIER
+input-output-port : ( "output" | "input" ) IDENTIFIER
 
 statement : assignment | module-invocation
 
-module-invocation : IDENTIFIER "(" ident-list ")"
-
-ident-list : IDENTIFIER | IDENTIFIER "," ident-list
+module-invocation : IDENTIFIER "(" IDENTIFIER ("," IDENTIFIER)* ")"
 
 assignment : IDENTIFIER "=" expr
 
