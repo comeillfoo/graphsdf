@@ -8,11 +8,12 @@ TEST?=test
 
 
 TESTSDIR=tests
-SRCDIR=.
+SRCDIR=lang
 
 
 SOURCES=$(filter-out $(SRCDIR)/parser.rkt,$(wildcard $(SRCDIR)/*.rkt))
 SOURCES+=$(filter-out $(TESTSDIR)/parser-test.rkt,$(wildcard $(TESTSDIR)/*.rkt))
+SOURCES+=backend.rkt
 
 
 format:
@@ -32,7 +33,7 @@ lint: $(SOURCES)
 
 test:
 	$(RKT) $(TESTSDIR)/parser-test.rkt
-	$(RACO) $(TEST) $(SOURCES)
+	$(RACO) $(TEST) $(filter-out backend.rkt,$(SOURCES))
 
 
 .PHONY: test lint format format-fix $(SOURCES)
