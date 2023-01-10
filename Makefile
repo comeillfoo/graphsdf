@@ -1,15 +1,18 @@
 SHELL:=/bin/bash
 
+RKT?=racket
 RACO?=raco
 FMT?=fmt
 REVIEW?=review
 TEST?=test
 
-TESTS=tests
-SRC=.
 
-SOURCES=$(filter-out $(SRC)/parser.rkt,$(wildcard $(SRC)/*.rkt))
-SOURCES+=$(filter-out $(TESTS)/parser-test.rkt,$(wildcard $(TESTS)/*.rkt))
+TESTSDIR=tests
+SRCDIR=.
+
+
+SOURCES=$(filter-out $(SRCDIR)/parser.rkt,$(wildcard $(SRCDIR)/*.rkt))
+SOURCES+=$(filter-out $(TESTSDIR)/parser-test.rkt,$(wildcard $(TESTSDIR)/*.rkt))
 
 
 format:
@@ -28,7 +31,8 @@ lint: $(SOURCES)
 
 
 test:
-	$(RACO) $(TEST) $(SRC)
+	$(RKT) $(TESTSDIR)/parser-test.rkt
+	$(RACO) $(TEST) $(SOURCES)
 
 
 .PHONY: test lint format format-fix $(SOURCES)

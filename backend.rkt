@@ -89,8 +89,8 @@
   ;; Any code in this `test` submodule runs when this file is run using DrRacket
   ;; or with `raco test`. The code here does not run when this file is
   ;; required by another module.
-  (check-equal? (fire (node 0 'out 8)) '(8))
-  (check-equal? (fire (node 0 'out -) '(8 5)) '(3)))
+  (check-equal? (fire (node 0 8 #f)) '(8))
+  (check-equal? (fire (node 0 - #f) '(8 5)) '(3)))
 
 (module+ main
   ;; (Optional) main submodule. Put code here if you need it to be executed when
