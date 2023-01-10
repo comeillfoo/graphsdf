@@ -90,20 +90,13 @@
       (let*
         ([op   (car EXPRESSION)]
          [args (cdr EXPRESSION)]
-         [existed-args (map (curry hash-ref nodes) (filter (lambda (arg) (hash-has-key? nodes arg)) args))]
-         [non-existed-args
-          (map
-            (lambda
-              (arg)
-              (node (next-node-id) arg))
-              (filter-not
-                (lambda (arg) (hash-has-key? nodes arg))
-                args))]
-         [acc-node
-          (node
-            (next-node-id)
-            op)]
-         [arg-ids (map node-id (append existed-args non-existed-args))]
+         [nodes
+          (for/fold
+            ([updated-nodes nodes])
+            ([arg args])
+            (hash-set updated-nodes arg (hash-ref updated-nodes arg (node (next-node-id) arg))))]
+         [acc-node (node (next-node-id) op)]
+         [arg-ids (map (compose node-id (curry hash-ref nodes)) args)]
          [arg-queues
           (map
             (lambda (arg-id)
@@ -111,12 +104,7 @@
               arg-ids)])
         (values
           (hash-set
-            (for/fold
-              ([updated-nodes nodes])
-              ([arg non-existed-args])
-              (hash-set
-                updated-nodes
-                (node-value arg) arg))
+            nodes
             IDENTIFIER
             acc-node)
           (append queues arg-queues)))))

@@ -11,8 +11,7 @@
 // transfer(d, c, e)
 // f = e + d
 // g = f
-tmp0 = b
-tmp1 = tmp0 * b
+tmp1 = b * b
 tmp2 = a * c
 tmp3 = -4 * tmp2
 D = tmp1 + tmp3
