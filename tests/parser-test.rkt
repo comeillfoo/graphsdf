@@ -1,6 +1,6 @@
 #lang br
-(require "../parser.rkt"
-         "../tokenizer.rkt"
+(require "../lang/parser.rkt"
+         "../lang/tokenizer.rkt"
          brag/support)
 
 (define program

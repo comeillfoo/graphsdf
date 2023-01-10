@@ -3,7 +3,7 @@
 (module+ test
   (require brag/support
            rackunit
-           "../lexer.rkt")
+           "../lang/lexer.rkt")
 
   (define (lex str)
     (apply-port-proc gsdf-lexer str))

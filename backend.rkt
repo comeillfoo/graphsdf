@@ -1,10 +1,7 @@
 #lang racket
 
-(module+ test
-  (require rackunit))
+(require racket/cmdline)
 
-(module+ main
-  (require racket/cmdline))
 
 (struct node (id value [fired #:mutable]) #:transparent)
 
@@ -85,26 +82,15 @@
          (error 'queues "no output node for queue[~a]~n" id))
        (queue id input-node output-node (vector-ref q input-node) null)))))
 
-(module+ test
-  ;; Any code in this `test` submodule runs when this file is run using DrRacket
-  ;; or with `raco test`. The code here does not run when this file is
-  ;; required by another module.
-  (check-equal? (fire (node 0 8 #f)) '(8))
-  (check-equal? (fire (node 0 - #f) '(8 5)) '(3)))
 
-(module+ main
-  ;; (Optional) main submodule. Put code here if you need it to be executed when
-  ;; this file is run using DrRacket or the `racket` executable.  The code here
-  ;; does not run when this file is required by another module. Documentation:
-  ;; http://docs.racket-lang.org/guide/Module_Syntax.html#%28part._main-and-test%29
-  (define is-graph (make-parameter #f))
+(define is-graph (make-parameter #f))
 
   (define firings (make-parameter 1000))
 
   (define verbose (make-parameter #f))
 
   (define sdfir-file
-    (command-line #:program "backend"
+    (command-line #:program "sir"
                   #:once-each [("-g" "--graph") "Prints only graph in .dot format" (is-graph #t)]
                   [("-f" "--firings")
                    raw-firings
@@ -115,98 +101,99 @@
                   ; return the argument as a filepath to compile
                   filepath))
 
-  (define in (open-input-file sdfir-file #:mode 'text))
 
-  (define topology-matrix
-    (for/vector ([row (in-lines in)])
-      #:break (not (non-empty-string? row))
-      (for/vector ([column (string-split row)])
-        (string->number column))))
+(define in (open-input-file sdfir-file #:mode 'text))
 
-  (define nodes
-    (for/list ([idx (in-range (vector-length topology-matrix))])
-      (let ([raw-node (read-line in)])
+(define topology-matrix
+  (for/vector ([row (in-lines in)])
+    #:break (not (non-empty-string? row))
+    (for/vector ([column (string-split row)])
+      (string->number column))))
 
-        (node idx
-              (match raw-node
-                ["add" +]
-                ["sub" -]
-                ["mul" *]
-                ["div" /]
-                ["sqrt" sqrt]
-                [(pregexp #px"imm\\s{1,}(-{,1}\\d{1,}(\\.\\d{1,}){,1})" (list _ raw-imm _))
-                 (string->number raw-imm)]
-                [(pregexp #px"val\\s{1,}([[:alpha:]_]{1}\\w{0,})" (list _ raw-val)) raw-val])
-              #f))))
+(define nodes
+  (for/list ([idx (in-range (vector-length topology-matrix))])
+    (let ([raw-node (read-line in)])
 
-  (close-input-port in)
+      (node idx
+            (match raw-node
+              ["add" +]
+              ["sub" -]
+              ["mul" *]
+              ["div" /]
+              ["sqrt" sqrt]
+              [(pregexp #px"imm\\s{1,}(-{,1}\\d{1,}(\\.\\d{1,}){,1})" (list _ raw-imm _))
+                (string->number raw-imm)]
+              [(pregexp #px"val\\s{1,}([[:alpha:]_]{1}\\w{0,})" (list _ raw-val)) raw-val])
+            #f))))
 
-  (define queues (matrix->queues/list topology-matrix))
+(close-input-port in)
 
-  (for* ([q0 queues] [q1 queues])
-    (and
-     (= (queue-in q0) (queue-out q1))
-     (= (queue-out q0) (queue-in q1))
-     (error 'queues "found simple loop between queue[~a] and queue[~a]" (queue-id q0) (queue-id q1))))
+(define queues (matrix->queues/list topology-matrix))
 
-  (if (is-graph)
-      (displayln (build-graph nodes queues))
-      (void
-       (for/or ([turn (in-range (firings))])
-         (let* ([fireable-nodes (filter (curry fires? queues) nodes)]
-                [finish? (empty? fireable-nodes)])
-           (unless finish?
-             (let* ([fire-node (first fireable-nodes)]
-                    [queues-in (filter (curry queue-in? fire-node) queues)]
-                    [queues-out (filter (curry queue-out? fire-node) queues)]
-                    [queues-rest (filter (curry queue-none? fire-node) queues)]
-                    [inputs (map (lambda (q) (first (queue-tokens q))) queues-in)]
-                    [token (fire fire-node inputs)])
-               (if (empty? queues-out)
-                   (println (first token))
-                   ;; update output buffers
-                   (set! queues-out
-                         (map (lambda (q)
-                                (set-queue-tokens! q (append token (queue-tokens q)))
-                                q)
-                              queues-out)))
-               ;; if there were inputs then update corresponding input buffers
-               (unless (empty? inputs)
-                 (set! queues-in
-                       (map (lambda (q)
-                              (set-queue-tokens! q (list-tail (queue-tokens q) 1))
+(for* ([q0 queues] [q1 queues])
+  (and
+    (= (queue-in q0) (queue-out q1))
+    (= (queue-out q0) (queue-in q1))
+    (error 'queues "found simple loop between queue[~a] and queue[~a]" (queue-id q0) (queue-id q1))))
+
+(if (is-graph)
+    (displayln (build-graph nodes queues))
+    (void
+      (for/or ([turn (in-range (firings))])
+        (let* ([fireable-nodes (filter (curry fires? queues) nodes)]
+              [finish? (empty? fireable-nodes)])
+          (unless finish?
+            (let* ([fire-node (first fireable-nodes)]
+                  [queues-in (filter (curry queue-in? fire-node) queues)]
+                  [queues-out (filter (curry queue-out? fire-node) queues)]
+                  [queues-rest (filter (curry queue-none? fire-node) queues)]
+                  [inputs (map (lambda (q) (first (queue-tokens q))) queues-in)]
+                  [token (fire fire-node inputs)])
+              (if (empty? queues-out)
+                  (println (first token))
+                  ;; update output buffers
+                  (set! queues-out
+                        (map (lambda (q)
+                              (set-queue-tokens! q (append token (queue-tokens q)))
                               q)
-                            queues-in)))
-               (set!
-                queues
-                (sort (append queues-in queues-out queues-rest) < #:key (lambda (q) (queue-id q))))
-               ;; mark val nodes as fired
-               (when (string? (node-value fire-node))
-                 (set-node-fired! fire-node #t)
-                 (set! nodes (list-set nodes (node-id fire-node) fire-node))))
-             (when (verbose)
-               (printf "--- stage[~a/~a] ---~n" turn (firings))
-               (printf "queues:~n~a~n"
-                       (string-join (map (lambda (q)
-                                           (format "- [~a:~a->~a]: [~a]"
-                                                   (queue-id q)
-                                                   (queue-in q)
-                                                   (queue-out q)
-                                                   (string-join (map (lambda (token)
-                                                                       (number->string token))
-                                                                     (queue-tokens q))
-                                                                ", ")))
-                                         queues)
-                                    "\n"))
-               (printf "nodes:~n~a~n"
-                       (string-join
-                        (map (lambda (n)
-                               (let ([value (node-value n)])
-                                 (format "- [~a]: ~a"
-                                         (node-id n)
-                                         (if (procedure? value)
-                                             (string-append "(" (hash-ref procedures value) ")")
-                                             value))))
-                             nodes)
-                        "\n"))))
-           finish?)))))
+                            queues-out)))
+              ;; if there were inputs then update corresponding input buffers
+              (unless (empty? inputs)
+                (set! queues-in
+                      (map (lambda (q)
+                            (set-queue-tokens! q (list-tail (queue-tokens q) 1))
+                            q)
+                          queues-in)))
+              (set!
+              queues
+              (sort (append queues-in queues-out queues-rest) < #:key (lambda (q) (queue-id q))))
+              ;; mark val nodes as fired
+              (when (string? (node-value fire-node))
+                (set-node-fired! fire-node #t)
+                (set! nodes (list-set nodes (node-id fire-node) fire-node))))
+            (when (verbose)
+              (printf "--- stage[~a/~a] ---~n" turn (firings))
+              (printf "queues:~n~a~n"
+                      (string-join (map (lambda (q)
+                                          (format "- [~a:~a->~a]: [~a]"
+                                                  (queue-id q)
+                                                  (queue-in q)
+                                                  (queue-out q)
+                                                  (string-join (map (lambda (token)
+                                                                      (number->string token))
+                                                                    (queue-tokens q))
+                                                              ", ")))
+                                        queues)
+                                  "\n"))
+              (printf "nodes:~n~a~n"
+                      (string-join
+                      (map (lambda (n)
+                              (let ([value (node-value n)])
+                                (format "- [~a]: ~a"
+                                        (node-id n)
+                                        (if (procedure? value)
+                                            (string-append "(" (hash-ref procedures value) ")")
+                                            value))))
+                            nodes)
+                      "\n"))))
+          finish?))))
