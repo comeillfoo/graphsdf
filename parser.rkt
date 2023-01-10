@@ -20,6 +20,7 @@ expr : [unary-op] ident-or-const
 ident-or-const : IDENTIFIER | CONSTANT
 
 unary-op : "-"
+  | "sqrt"
 
 binary-op : "+"
   | "-"

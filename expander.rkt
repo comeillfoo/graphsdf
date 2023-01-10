@@ -33,7 +33,8 @@
     + "add"
     - "sub"
     * "mul"
-    / "div"))
+    / "div"
+    sqrt "sqrt"))
 
 
 (define (build-ir nodes queues)
@@ -127,7 +128,8 @@
     "-" -
     "+" +
     "*" *
-    "/" /))
+    "/" /
+    "sqrt" sqrt))
 
 
 (define (unary-op op)
