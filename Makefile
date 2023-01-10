@@ -3,29 +3,32 @@ SHELL:=/bin/bash
 RACO?=raco
 FMT?=fmt
 REVIEW?=review
-EXE?=exe
-DISTR?=distribute
 TEST?=test
 
 TESTS=tests
-RKTDIR=.
+SRC=.
 
-racket-format:
-	diff -u <(cat $(RKTDIR)/*.rkt ) <($(RACO) $(FMT) $(RKTDIR)/*.rkt )
-
-
-racket-format-fix:
-	find $(RKTDIR) -type f -name '*.rkt' -print0 | xargs -0 -n1 $(RACO) $(FMT) -i
+SOURCES=$(filter-out $(SRC)/parser.rkt,$(wildcard $(SRC)/*.rkt))
+SOURCES+=$(filter-out $(TESTS)/parser-test.rkt,$(wildcard $(TESTS)/*.rkt))
 
 
-racket-lint:
-	find $(RKTDIR) -type f -name '*.rkt' -print0 | xargs -0 -n1 $(RACO) $(REVIEW)
+format:
+	diff -u <(cat $(SOURCES)) <($(RACO) $(FMT) $(SOURCES))
 
-lint: racket-lint
 
-racket-test:
-	$(RACO) $(TEST) $(RKTDIR)
+format-fix:
+	$(RACO) $(FMT) -i $(SOURCES)
 
-test: racket-test
 
-.PHONY: test lint racket-lint racket-format racket-format-fix racket-test
+$(SOURCES):
+	$(RACO) $(REVIEW) $@
+
+
+lint: $(SOURCES)
+
+
+test:
+	$(RACO) $(TEST) $(SRC)
+
+
+.PHONY: test lint format format-fix $(SOURCES)

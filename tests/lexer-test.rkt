@@ -1,10 +1,10 @@
 #lang br
-(require "../lexer.rkt"
-         brag/support
-         rackunit)
+(require brag/support
+         rackunit
+         "../lexer.rkt")
 
 (define (lex str)
-  (apply-port-proc sdf-lexer str))
+  (apply-port-proc gsdf-lexer str))
 
 (define (test-data-keyword keyword)
   (list (lex keyword)
