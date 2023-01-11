@@ -2,15 +2,7 @@
 
 gsdf-program : statement*
 
-;;; statement-or-module-definition : statement | module-definition
-
-;;; module-definition : "module" IDENTIFIER "(" input-output-port ("," input-output-port)* ")" ";" assignment+ "endmodule"
-
-;;; input-output-port : ( "output" | "input" ) IDENTIFIER
-
-statement : assignment ;;; | module-invocation
-
-;;; module-invocation : IDENTIFIER "(" IDENTIFIER ("," IDENTIFIER)* ")"
+statement : assignment
 
 assignment : IDENTIFIER "=" expr
 
