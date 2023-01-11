@@ -376,6 +376,8 @@ g1 -> g2 [label="1"]
 }
 ```
 
+![example.svg](examples/example.svg)
+
 Выполнение eDSL:
 ```
 $ racket backend.rkt tests/example.sir
