@@ -1,7 +1,2 @@
-1 0
-0 1
--1 -1
-
-val input2val
-imm -3.1415926
-sub
+(#s((node #(2)) 0 "input2val" #f) #s((node #(2)) 1 -3.1415926 #f) #s((node #(2)) 2 "-" #f))
+(#s((queue #(4)) 0 0 2 1 ()) #s((queue #(4)) 0 1 2 1 ()))

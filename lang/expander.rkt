@@ -1,73 +1,59 @@
 #lang br/quicklang
 
-(require racket/contract
-         racket/generator)
+(require racket/contract)
 
-(define (undefined-op op)
-  (error 'op "operation ~a unknown~n" op))
-
-(struct queue (id in out) #:transparent)
-(struct node (id value) #:transparent)
-
-(define next-node-id (sequence->generator (in-naturals)))
-
-(define next-queue-id (sequence->generator (in-naturals)))
+(struct node (id value [fired #:mutable]) #:prefab)
+(struct queue (id in out capacity [tokens #:mutable]) #:prefab)
 
 (define-macro (gsdf-module-begin PARSE-TREE) #'(#%module-begin PARSE-TREE))
 (provide (rename-out [gsdf-module-begin #%module-begin]))
 
 (define-macro (gsdf-program STATEMENTS ...)
-              #'(let-values ([(nodes queues) (fold-program (list STATEMENTS ...))])
-                  (void (build-ir nodes queues))))
+              #'(let-values ([(nodes queues nodes-count queues-count)
+                              (fold-program (list STATEMENTS ...))])
+                  (writeln (sort (map cdr (hash->list nodes)) < #:key node-id))
+                  (writeln queues)))
 (provide gsdf-program)
 
-(define operations (hash + "add" - "sub" * "mul" / "div" sqrt "sqrt"))
-
-(define (build-ir nodes queues)
-  (let ([nodes (sort (hash-values nodes) < #:key node-id)])
-    (for ([n nodes])
-      (for ([q queues])
-        (let ([id (node-id n)] [in (queue-in q)] [out (queue-out q)])
-          (printf (~a #:align 'right
-                      #:min-width 3
-                      (cond
-                        [(= in id) 1]
-                        [(= out id) -1]
-                        [else 0])))))
-      (newline))
-    (newline)
-    (for ([n nodes])
-      (printf (match (node-value n)
-                [(? procedure? op)
-                 (format "~a~n" (hash-ref operations op (lambda (op) (undefined-op op))))]
-                [(? number? constant) (format "imm ~a~n" constant)]
-                [(? string? identifier) (format "val ~a~n" identifier)])))))
-
 (define/contract (fold-program statements)
-                 ((listof procedure?) . -> . (values hash? (listof queue?)))
-                 (for/fold ([nodes (hash)] [queues null]) ([stmt (in-list statements)])
-                   (stmt nodes queues)))
+                 ((listof procedure?) . -> . (values hash? (listof queue?) number? number?))
+                 (for/fold ([nodes (hash)] [queues null] [next-node-id 0] [next-queue-id 0])
+                           ([stmt (in-list statements)])
+                   (stmt nodes queues next-node-id next-queue-id)))
 
-(define-macro (statement ASSIGNMENT) #'(lambda (nodes queues) (ASSIGNMENT nodes queues)))
+(define-macro (statement ASSIGNMENT)
+              #'(lambda (nodes queues next-node-id next-queue-id)
+                  (ASSIGNMENT nodes queues next-node-id next-queue-id)))
 (provide statement)
+
+(define-macro (next-object! ID)
+              #'(begin0 ID
+                  (set! ID (add1 ID))))
 
 (define-macro
  (assignment IDENTIFIER "=" EXPRESSION)
- #'(lambda (nodes queues)
+ #'(lambda (nodes queues next-node-id next-queue-id)
      ; test if value already assigned
      (when (hash-has-key? nodes IDENTIFIER)
        (error 'assignment "name ~a already in use~n" IDENTIFIER))
      ; actual work
      (let* ([op (car EXPRESSION)]
             [args (cdr EXPRESSION)]
-            [nodes
-             (for/fold ([updated-nodes nodes]) ([arg args])
-               (hash-set updated-nodes arg (hash-ref updated-nodes arg (node (next-node-id) arg))))]
-            [acc-node (node (next-node-id) op)]
+            [nodes (for/fold ([updated-nodes nodes]) ([arg args])
+                     (hash-set updated-nodes
+                               arg
+                               (hash-ref updated-nodes
+                                         arg
+                                         (lambda () (node (next-object! next-node-id) arg #f)))))]
+            [acc-node (node (next-object! next-node-id) op #f)]
             [arg-ids (map (compose node-id (curry hash-ref nodes)) args)]
-            [arg-queues (map (lambda (arg-id) (queue (next-queue-id) arg-id (node-id acc-node)))
+            [arg-queues (map (lambda (arg-id)
+                               (queue (next-object! next-queue-id) arg-id (node-id acc-node) 1 null))
                              arg-ids)])
-       (values (hash-set nodes IDENTIFIER acc-node) (append queues arg-queues)))))
+       (values (hash-set nodes IDENTIFIER acc-node)
+               (append queues arg-queues)
+               next-node-id
+               next-queue-id))))
 (provide assignment)
 
 (define-macro-cases expr
@@ -79,12 +65,10 @@
 (define-macro (ident-or-const VALUE) #'VALUE)
 (provide ident-or-const)
 
-(define procedures (hash "-" - "+" + "*" * "/" / "sqrt" sqrt))
-
 (define (unary-op op)
-  (hash-ref procedures op (lambda () (undefined-op op))))
+  op)
 (provide unary-op)
 
 (define (binary-op op)
-  (hash-ref procedures op (lambda () (undefined-op op))))
+  op)
 (provide binary-op)
