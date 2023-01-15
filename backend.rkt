@@ -3,7 +3,8 @@
 (module structs racket
   (provide (all-defined-out))
   (struct node (id value [fired #:mutable]) #:prefab)
-  (struct queue (id in out capacity [tokens #:mutable]) #:prefab))
+  (struct queue (id in out capacity [tokens #:mutable]) #:prefab)
+  (queue 0 0 0 0 null))
 
 (module graphic racket
   (provide (all-defined-out))
@@ -182,21 +183,22 @@
    (= (queue-out q0) (queue-in q1))
    (error 'queues "found simple loop between queue[~a] and queue[~a]" (queue-id q0) (queue-id q1))))
 
-(define procedures (hash "+" + "-" - "*" * "/" / "sqrt" sqrt))
+(define string->procedures (hash "+" + "-" - "*" * "/" / "sqrt" sqrt))
 
 ;;; main
-(if (is-graph)
-    (displayln (build-graph init-nodes init-queues))
-    (let ([init-nodes (map (lambda (n)
-                             (node (node-id n)
-                                   (hash-ref procedures (node-value n) (node-value n))
-                                   (node-fired n)))
-                           init-nodes)])
-      (for/fold ([nodes init-nodes] [queues init-queues] [finish? #f] #:result (void))
-                ([turn (in-range (firings))])
-        #:break finish?
-        (when (verbose)
-          (print-stage turn (firings))
-          (print-queues queues)
-          (print-nodes nodes))
-        (run-step nodes queues))))
+(cond
+  [(is-graph) (displayln (build-graph init-nodes init-queues))]
+  [else
+   (let ([init-nodes (map (lambda (n)
+                            (node (node-id n)
+                                  (hash-ref string->procedures (node-value n) (node-value n))
+                                  (node-fired n)))
+                          init-nodes)])
+     (for/fold ([nodes init-nodes] [queues init-queues] [finish? #f] #:result (void))
+               ([turn (in-range (firings))])
+       #:break finish?
+       (when (verbose)
+         (print-stage turn (firings))
+         (print-queues queues)
+         (print-nodes nodes))
+       (run-step nodes queues)))])
