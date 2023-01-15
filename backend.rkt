@@ -4,7 +4,7 @@
   (provide (all-defined-out))
   (struct node (id value [fired #:mutable]) #:prefab)
   (struct queue (id in out capacity [tokens #:mutable]) #:prefab)
-  (queue 0 0 0 0 null))
+  (void (queue 0 0 0 0 null)))
 
 (module graphic racket
   (provide (all-defined-out))
