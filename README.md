@@ -165,85 +165,144 @@ binary-op : "+"
 
 Утилита командной строки, которая либо исполняет eDSL, либо по ключу -g строит граф в формате .dot.
 
+Модуль со структурами:
+```racket
+(module structs racket
+  (provide (all-defined-out))
+  (struct node (id value [fired #:mutable]) #:prefab)
+  (struct queue (id in out capacity [tokens #:mutable]) #:prefab)
+  (void (queue 0 0 0 0 null)))
+```
+
 Строительство графа:
 ```racket
+(module graphic racket
+  (provide (all-defined-out))
+  (require (submod ".." structs))
+  (define/contract (node->string n)
+                   (node? . -> . string?)
+                   (string-append "g"
+                                  (number->string (node-id n))
+                                  " [label=\""
+                                  (let ([value (node-value n)])
+                                    (match value
+                                      [(? number?) (number->string value)]
+                                      [(? string?) value]))
+                                  "\"]"))
 
-(struct node (id value [fired #:mutable]) #:transparent)
-(struct queue (id in out capacity [tokens #:mutable]) #:transparent)
+  (define (string-append-with-newline str ...)
+    (string-append str "\n" ...))
 
-(define procedures (hash + "+" - "-" * "*" / "/" sqrt "sqrt"))
+  (define/contract (queue->string q)
+                   (queue? . -> . string?)
+                   (string-append "g"
+                                  (number->string (queue-in q))
+                                  " -> g"
+                                  (number->string (queue-out q))
+                                  " [label=\""
+                                  (number->string (queue-capacity q))
+                                  "\"]"))
 
-(define/contract
-    (node->string n)
-    (node? . -> . string?)
-    (string-append
-        "g"
-        (number->string (node-id n))
-        " [label=\""
-        (let ([value (node-value n)])
-            (match value
-            [(? procedure?)
-                (hash-ref procedures value "undefined")]
-            [(? number?)
-                (number->string value)]
-            [(? string?)
-                value]))
-        "\"]"))
-
-(define/contract
-    (queue->string q)
-    (queue? . -> . string?)
-    (string-append
-        "g"
-        (number->string (queue-in q))
-        " -> g"
-        (number->string (queue-out q))
-        " [label=\""
-        (number->string (queue-capacity q))
-        "\"]"))
-
-(define (string-append-with-newline str ...)
-  (string-append str "\n" ...))
-
-(define/contract
-    (build-graph nodes queues)
-    (-> (listof node?) (listof queue?) string?)
-    (string-append
-        "digraph G {\n"
-        (foldr string-append-with-newline "" (map node->string nodes))
-        (foldr string-append-with-newline "" (map queue->string queues))
-        "}"))
+  (define/contract (build-graph nodes queues)
+                   (-> (listof node?) (listof queue?) string?)
+                   (string-append "digraph G {\n"
+                                  (foldr string-append-with-newline "" (map node->string nodes))
+                                  (foldr string-append-with-newline "" (map queue->string queues))
+                                  "}")))
 ```
 
 Вспомогательные функции выполнения eDSL:
 ```racket
-(define/contract (queue-in? n q) (-> node? queue? boolean?) (= (queue-out q) (node-id n)))
+(module executor racket
+  (require (submod ".." structs))
+  (provide (all-defined-out))
 
-(define/contract (queue-out? n q) (-> node? queue? boolean?) (= (queue-in q) (node-id n)))
+  (define/contract (queue-in? n q)
+    (-> node? queue? boolean?)
+    (= (queue-out q) (node-id n)))
 
-(define/contract (queue-none? n q)
-                 (-> node? queue? boolean?)
-                 (not (or (queue-in? n q) (queue-out? n q))))
+  (define/contract (queue-out? n q)
+    (-> node? queue? boolean?)
+    (= (queue-in q) (node-id n)))
 
-;;; функция fires? определяет можно ли активировать данный узел
-(define/contract
- (fires? queues n)
- ((listof queue?) node? . -> . boolean?)
- (let ([output (filter (curry queue-out? n) queues)] [input (filter (curry queue-in? n) queues)])
-   (and (andmap (lambda (q) (= (length (queue-tokens q)) (queue-capacity q))) input)
-        (andmap (lambda (q) (< (length (queue-tokens q)) (queue-capacity q))) output)
-        (not (node-fired n)))))
+  (define/contract (queue-none? n q)
+                   (-> node? queue? boolean?)
+                   (not (or (queue-in? n q) (queue-out? n q))))
 
-;;; fire активирует узел и возвращает результат активации
-(define (fire n [inputs null])
-  (list (let ([value (node-value n)])
-          (match value
-            [(? string?)
-             (begin
-               (printf "Enter ~a value: " value)
-               (string->number (read-line)))]
-            [(? number?) value]
-            [(? procedure?) (apply value inputs)]))))
+  (define/contract (fires? queues n)
+   ((listof queue?) node? . -> . boolean?)
+   (let
+    ([output (filter (curry queue-out? n) queues)]
+     [input (filter (curry queue-in? n) queues)])
+    (and
+      (andmap
+        (lambda (q) (= (length (queue-tokens q)) (queue-capacity q))) input)
+      (andmap
+        (lambda (q) (< (length (queue-tokens q)) (queue-capacity q))) output)
+      (not (node-fired n)))))
+
+  (define (fire n [inputs null])
+    (list
+      (let
+        ([value (node-value n)])
+        (match value
+          [(? string?)
+            (begin
+              (printf "Enter ~a value: " value)
+              (string->number (read-line)))]
+          [(? number?) value]
+          [(? procedure?) (apply value inputs)]))))
+
+  (define/contract (push-queue tokens q)
+    ((listof number?) queue? . -> . queue?)
+    (set-queue-tokens! q (append tokens (queue-tokens q)))
+    q)
+
+  (define/contract (pop-queue q)
+    (queue? . -> . queue?)
+    (set-queue-tokens! q (list-tail (queue-tokens q) 1))
+    q)
+
+  (define/contract (run-step nodes queues)
+    ((listof node?) (listof queue?)
+      . -> .
+      (values (listof node?) (listof queue?) boolean?))
+    (let*
+      ([fireable-nodes (filter (curry fires? queues) nodes)]
+       [finish? (empty? fireable-nodes)])
+      (cond
+        [finish? (values nodes queues finish?)]
+        [else
+          (let*
+            ([fire-node (first fireable-nodes)]
+             [queues-in (filter (curry queue-in? fire-node) queues)]
+             [queues-out (filter (curry queue-out? fire-node) queues)]
+             [queues-rest (filter (curry queue-none? fire-node) queues)]
+             [inputs (map (compose1 first queue-tokens) queues-in)]
+             [token (fire fire-node inputs)])
+            ;; update output queues or print result
+            (cond
+              [(empty? queues-out) (println (first token))]
+              [else
+                (set!
+                  queues-out
+                  (map (curry push-queue token) queues-out))])
+            ;; update input queues if there were
+            (unless (empty? inputs)
+              (set! queues-in (map pop-queue queues-in)))
+            ;; update the whole queues list
+            (set!
+              queues
+              (sort
+                (append queues-in queues-out queues-rest)
+                <
+                #:key queue-id))
+            ;; mark val node as fired
+            (when (string? (node-value fire-node))
+              (set-node-fired! fire-node #t)
+              (set! nodes (list-set nodes (node-id fire-node) fire-node)))
+            ;; result
+            (values nodes queues finish?))]))))
 ```
 
 Цикл исполнения eDSL:
@@ -255,114 +314,31 @@ binary-op : "+"
 6. Переходим на шаг 1
 7. Завершаем выполнение
 ```racket
-(for/or ([turn (in-range (firings))])
-    (let*
-        ([fireable-nodes
-            (filter
-                (curry fires? queues)
-                nodes)] ;;; находим список узлов, которые могут быть активированы
-         [finish?
-            (empty? fireable-nodes)]) ;;; условие остановки for/or остановится, если true вернется
-        (unless finish?
-            (let*
-                ([fire-node
-                    (first fireable-nodes)] ;;; берем первый узел из списка на активацию
-                 [queues-in ;;; очереди, входящие в узел
-                    (filter
-                        (curry queue-in? fire-node)
-                        queues)]
-                 [queues-out ;;; очереди, выходящие из узла
-                    (filter
-                        (curry queue-out? fire-node)
-                        queues)]
-                 ;;; оставшиеся очереди для обновления очередей
-                 [queues-rest
-                    (filter
-                        (curry queue-none? fire-node)
-                        queues)]
-                 ;;; из каждой входной очереди берем по токену
-                 [inputs
-                    (map
-                        (lambda (q) (first (queue-tokens q)))
-                        queues-in)]
-                [token
-                    (fire fire-node inputs)])
-            ;;; для узлов без очередей на выход, выводим результат на экран
-            (if (empty? queues-out)
-                (println (first token))
-                ;; update output buffers
-                (set! queues-out
-                    (map (lambda (q)
-                            (set-queue-tokens! q (append token (queue-tokens q)))
-                            q)
-                        queues-out)))
-            ;; if there were inputs then update corresponding input buffers
-            (unless (empty? inputs)
-            (set! queues-in
-                    (map (lambda (q)
-                        (set-queue-tokens! q (list-tail (queue-tokens q) 1))
-                        q)
-                        queues-in)))
-            ;;; обновляем очереди к узлам
-            (set! queues
-                (sort (append queues-in queues-out queues-rest) < #:key (lambda (q) (queue-id q))))
-            ;; mark val nodes as fired
-            (when (string? (node-value fire-node))
-            (set-node-fired! fire-node #t)
-            (set! nodes (list-set nodes (node-id fire-node) fire-node))))
-        ;; если включена опция verbose, то далее печатаются состояния очередей и узлов
-        (when (verbose)
-            (printf "--- stage[~a/~a] ---~n" turn (firings))
-            (printf
-                "queues:~n~a~n"
-                (string-join
-                    (map
-                        (lambda (q)
-                            (format
-                                "- [~a:~a->~a]: [~a]"
-                                (queue-id q)
-                                (queue-in q)
-                                (queue-out q)
-                                (string-join
-                                    (map
-                                        (lambda (token)
-                                            (number->string token))
-                                        (queue-tokens q))
-                                    ", ")))
-                        queues)
-                    "\n"))
-            (printf
-                "nodes:~n~a~n"
-                (string-join
-                    (map
-                        (lambda (n)
-                            (let
-                                ([value (node-value n)])
-                                (format "- [~a]: ~a"
-                                    (node-id n)
-                                    (if (procedure? value)
-                                        (string-append
-                                            "("
-                                            (hash-ref procedures value)
-                                            ")")
-                                        value))))
-                        nodes)
-                    "\n"))))
-        finish?))
+(let
+  ([init-nodes
+    (map
+      (lambda
+        (n)
+        (node
+          (node-id n)
+          (hash-ref string->procedures (node-value n) (node-value n))
+          (node-fired n)))
+      init-nodes)])
+  (for/fold
+    ([nodes init-nodes]
+     [queues init-queues]
+     [finish? #f]
+     #:result (void))
+    ([turn (in-range (firings))])
+    #:break finish?
+    (when (verbose)
+      (print-stage turn (firings))
+      (print-queues queues)
+      (print-nodes nodes))
+    (run-step nodes queues)))
 ```
 
 ## Ввод/вывод программы
-
-Входной файл `tests/example.sir`:
-```
-1 0
-0 1
--1 -1
-
-val input2val
-imm -3.1415926
-sub
-```
 
 Строительство графа в .dot:
 ```
@@ -380,11 +356,11 @@ g1 -> g2 [label="1"]
 
 Выполнение eDSL:
 ```
-$ racket backend.rkt tests/example.sir
-Enter input2val value: 8
-11.1415926
+$ raco sir tests/example.sir
+Enter input2val value: -8.156554
+5.0149614 # -3.1415926 - (-8.156544)
 ```
 
 ## Выводы
 
-В ходе этой лабораторной работы я поработал с пакетом beautiful racket, благодаря которому можно практически декларативно создавать языки, что существенно экономит время. Также использовал простые функции для создания макросов, которые буквально за тебя правильно парсят сложные входные аргументы за счет конструкции `...` (которой я также воспользовался и в функции для создания vararg). Использовал механику контрактов для обеспечения безопасности передаваемых и возвращаемых типов для функций. Нашел инфиксную запись через точку. И воспользовался apply, curry и compose для построения анонимных функций с замыканиями, что повысило лаконичность кода.
+В ходе этой лабораторной работы я поработал с пакетом beautiful racket, благодаря которому можно практически декларативно создавать языки, что существенно экономит время. Также использовал простые функции для создания макросов, которые буквально за тебя правильно парсят сложные входные аргументы за счет конструкции `...` (которой я также воспользовался и в функции для создания vararg). Использовал механику контрактов для обеспечения безопасности передаваемых и возвращаемых типов для функций. Нашел инфиксную запись через точку. И воспользовался apply, curry и compose/compose1 для построения анонимных функций с замыканиями, что повысило лаконичность кода. А также разделил все функции на модули, что должно повысить читаемость кода.
