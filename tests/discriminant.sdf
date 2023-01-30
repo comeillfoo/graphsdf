@@ -1,17 +1,8 @@
-#lang graphsdf
-// a = 2.5 * c
-// b = a / -0.8
+#lang reader "../lang/reader.rkt"
+(+
+    (*
+        (const -4)
+        (* (const 8) (const 8)))
+    (* (const -4) (const 8)))
 
-// module transfer(input in1, input in2, output out);
-//  out = in1 * in2
-// endmodule
-
-// d = a - b
-
-// transfer(d, c, e)
-// f = e + d
-// g = f
-tmp1 = b * b
-tmp2 = a * c
-tmp3 = -4 * tmp2
-D = tmp1 + tmp3
+(+ (const 1) (const 2))
