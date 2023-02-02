@@ -1,8 +1,6 @@
 #lang reader "../lang/reader.rkt"
-(+
+(-
+    (* b b)
     (*
-        (const -4)
-        (* (const 8) (const 8)))
-    (* (const -4) (const 8)))
-
-(+ (const 1) (const 2))
+        4
+        (* a c)))

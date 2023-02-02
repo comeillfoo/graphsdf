@@ -40,6 +40,26 @@
     (number->symbol v))
 
 
+(define-syntax-rule (datum . literal)
+    (imm 'literal))
+
+
+(define (var id)
+    (set!-values
+        (nodes queues n-id q-id)
+        (values
+            (if (hash-has-key? nodes id)
+                nodes
+                (hash-set nodes id (node (next! n-id) (symbol->string id) #f)))
+            queues
+            n-id
+            q-id))
+    id)
+
+(define-syntax-rule (top . ID)
+    (var 'ID))
+
+
 (define (eval op args ...)
     (let*
         ([args-keys (list args ...)]
@@ -88,19 +108,21 @@
     (except-out
         (all-from-out racket)
         #%module-begin
+        #%top
+        #%datum
         +
         -
         *
         /
-        sqrt
-        const)
+        sqrt)
     (rename-out
+        [module-begin #%module-begin]
+        [top #%top]
+        [datum #%datum]
         [add +]
         [sub -]
         [mul *]
         [div /]
-        [imm const]
-        [-sqrt sqrt]
-        [module-begin #%module-begin])
+        [-sqrt sqrt])
     nodes
     queues)
