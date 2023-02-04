@@ -1,13 +1,20 @@
-#lang s-exp "../lang/expander.rkt"
-(define d
-    (sqrt
+#lang s-exp graphsdf
+(/
+    (-
+        (sqrt
+            (+
+                (* b b)
+                (* -4 (* a c))))
+        b)
+    (* 2 a))
+
+(/
+    (*
+        -1
         (+
-            (* b b)
-            (* -4 (* a c)))))
-
-(define neg-b (- b))
-
-(define twice-a (* 2 a))
-
-(/ (+ neg-b d) twice-a)
-(/ (- neg-b d) twice-a)
+            b
+            (sqrt
+                (+
+                    (* b b)
+                    (* -4 (* a c))))))
+    (* 2 a))

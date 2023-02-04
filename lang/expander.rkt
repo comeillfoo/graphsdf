@@ -20,57 +20,54 @@
          (unless (identifier? #'ARG) (raise-syntax-error #f "must be identifier" stx #'ARG))
          #'(begin0 ARG (set! ARG (add1 ARG)))]))
 
-(define nodes (hash))
-(define queues null)
-(define n-id 0)
-(define q-id 0)
 
-
-(define (imm v)
-    (set!-values
-        (nodes queues n-id q-id)
+(define (imm num)
+    (lambda (nodes queues n-id q-id key)
         (values
-            (if (hash-has-key? nodes (number->symbol v))
+            (if (hash-has-key? nodes (number->symbol num))
                 nodes
-                (hash-set nodes (number->symbol v) (node (next! n-id) v #f)))
+                (hash-set nodes (number->symbol num) (node (next! n-id) num #f)))
             queues
             n-id
-            q-id))
-    ; (writeln nodes)
-    (number->symbol v))
-
+            q-id
+            (list (number->symbol num)))))
 
 (define-syntax-rule (datum . literal)
     (imm 'literal))
 
 
 (define (var id)
-    (set!-values
-        (nodes queues n-id q-id)
+    (lambda (nodes queues n-id q-id key)
         (values
             (if (hash-has-key? nodes id)
                 nodes
                 (hash-set nodes id (node (next! n-id) (symbol->string id) #f)))
             queues
             n-id
-            q-id))
-    id)
+            q-id
+            (list id))))
 
 (define-syntax-rule (top . ID)
     (var 'ID))
 
 
-(define (eval op args ...)
-    (let*
-        ([args-keys (list args ...)]
-         [args-ids (map (compose node-id (curry hash-ref nodes)) args-keys)]
-         [acc-id (next! n-id)]
-         [acc-value (node acc-id op #f)]
-         [acc-key (string->symbol (string-append op ":" (number->string acc-id)))])
-        (set!-values
-            (nodes queues n-id q-id)
+(define (eval op . subexprs)
+    (lambda (nodes queues n-id q-id key)
+        ; apply subfunctions
+        (let*
+            ([args (for/fold
+                        ([args null])
+                        ([subexpr subexprs])
+                        (set!-values
+                            (nodes queues n-id q-id key)
+                            (subexpr nodes queues n-id q-id key))
+                        (append args key))]
+             [args-ids (map (compose node-id (curry hash-ref nodes)) args)]
+             [acc-id (next! n-id)]
+             [acc-node (node acc-id op #f)]
+             [acc-key (string->symbol (string-append op ":" (number->string acc-id)))])
             (values
-                (hash-set nodes acc-key acc-value)
+                (hash-set nodes acc-key acc-node)
                 (append
                     queues
                     (map
@@ -79,8 +76,8 @@
                             (queue (next! q-id) id acc-id 1 null))
                         args-ids))
                 n-id
-                q-id))
-        acc-key))
+                q-id
+                (list acc-key)))))
 
 (define (add a b)
     (eval "+" a b))
@@ -98,11 +95,21 @@
     (eval "sqrt" a))
 
 
-(define-syntax-rule (module-begin expr ...)
+(define-syntax-rule (module-begin exprs ...)
     (#%module-begin
-        (void expr ...)
-        (writeln (hash->sorted-list nodes node-id))
-        (writeln queues)))
+        (let-values 
+            ([(nodes queues)
+              (for/fold
+                ([ns (hash)]
+                 [qs null]
+                 [n-id 0]
+                 [q-id 0]
+                 [_ null]
+                 #:result (values ns qs))
+                ([expr (list exprs ...)])
+                (expr ns qs n-id q-id null))])
+            (writeln (hash->sorted-list nodes node-id))
+            (writeln queues))))
 
 (provide
     (except-out
@@ -123,6 +130,4 @@
         [sub -]
         [mul *]
         [div /]
-        [-sqrt sqrt])
-    nodes
-    queues)
+        [-sqrt sqrt]))
