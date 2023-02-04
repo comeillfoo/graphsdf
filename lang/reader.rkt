@@ -1,1 +1,1 @@
-#lang s-exp syntax/module-reader "../lang/expander.rkt"
+#lang s-exp syntax/module-reader graphsdf/lang/expander

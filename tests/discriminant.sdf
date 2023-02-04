@@ -1,4 +1,4 @@
-#lang reader graphsdf
+#lang graphsdf
 (-
     (* b b)
     (*

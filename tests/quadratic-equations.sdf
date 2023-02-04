@@ -1,4 +1,4 @@
-#lang s-exp graphsdf
+#lang graphsdf
 (/
     (-
         (sqrt
