@@ -1,74 +1,97 @@
-#lang br/quicklang
+#lang racket
+#|review: ignore|#
 
-(require racket/contract)
+(require (for-syntax syntax/parse)
+         racket/contract
+         syntax/parse/define)
 
 (struct node (id value [fired #:mutable]) #:prefab)
 (struct queue (id in out capacity [tokens #:mutable]) #:prefab)
 
-(define-macro (gsdf-module-begin PARSE-TREE) #'(#%module-begin PARSE-TREE))
-(provide (rename-out [gsdf-module-begin #%module-begin]))
+(define/contract (hash->sorted-list hash extractor)
+                 (hash? (any/c . -> . any/c) . -> . list?)
+                 (sort (map cdr (hash->list hash)) < #:key extractor))
 
-(define-macro (gsdf-program STATEMENTS ...)
-              #'(let-values ([(nodes queues nodes-count queues-count)
-                              (fold-program (list STATEMENTS ...))])
-                  (writeln (sort (map cdr (hash->list nodes)) < #:key node-id))
-                  (writeln queues)))
-(provide gsdf-program)
+(define/contract (number->symbol n) (number? . -> . symbol?) (string->symbol (number->string n)))
 
-(define/contract (fold-program statements)
-                 ((listof procedure?) . -> . (values hash? (listof queue?) number? number?))
-                 (for/fold ([nodes (hash)] [queues null] [next-node-id 0] [next-queue-id 0])
-                           ([stmt (in-list statements)])
-                   (stmt nodes queues next-node-id next-queue-id)))
+(define-syntax (next! stx)
+  (syntax-parse stx
+    [(_ ARG)
+     (unless (identifier? #'ARG)
+       (raise-syntax-error #f "must be identifier" stx #'ARG))
+     #'(begin0 ARG
+         (set! ARG (add1 ARG)))]))
 
-(define-macro (statement ASSIGNMENT)
-              #'(lambda (nodes queues next-node-id next-queue-id)
-                  (ASSIGNMENT nodes queues next-node-id next-queue-id)))
-(provide statement)
+(define (imm num)
+  (lambda (nodes queues n-id q-id key)
+    (values (if (hash-has-key? nodes (number->symbol num))
+                nodes
+                (hash-set nodes (number->symbol num) (node (next! n-id) num #f)))
+            queues
+            n-id
+            q-id
+            (list (number->symbol num)))))
 
-(define-macro (next-object! ID)
-              #'(begin0 ID
-                  (set! ID (add1 ID))))
+(define-syntax-rule (datum . literal) (imm 'literal))
 
-(define-macro
- (assignment IDENTIFIER "=" EXPRESSION)
- #'(lambda (nodes queues next-node-id next-queue-id)
-     ; test if value already assigned
-     (when (hash-has-key? nodes IDENTIFIER)
-       (error 'assignment "name ~a already in use~n" IDENTIFIER))
-     ; actual work
-     (let* ([op (car EXPRESSION)]
-            [args (cdr EXPRESSION)]
-            [nodes (for/fold ([updated-nodes nodes]) ([arg args])
-                     (hash-set updated-nodes
-                               arg
-                               (hash-ref updated-nodes
-                                         arg
-                                         (lambda () (node (next-object! next-node-id) arg #f)))))]
-            [acc-node (node (next-object! next-node-id) op #f)]
-            [arg-ids (map (compose node-id (curry hash-ref nodes)) args)]
-            [arg-queues (map (lambda (arg-id)
-                               (queue (next-object! next-queue-id) arg-id (node-id acc-node) 1 null))
-                             arg-ids)])
-       (values (hash-set nodes IDENTIFIER acc-node)
-               (append queues arg-queues)
-               next-node-id
-               next-queue-id))))
-(provide assignment)
+(define (var id)
+  (lambda (nodes queues n-id q-id key)
+    (values (if (hash-has-key? nodes id)
+                nodes
+                (hash-set nodes id (node (next! n-id) (symbol->string id) #f)))
+            queues
+            n-id
+            q-id
+            (list id))))
 
-(define-macro-cases expr
-                    [(expr VALUE) #'(cons + (list VALUE))]
-                    [(expr OP VALUE) #'(cons OP (list VALUE))]
-                    [(expr VALUE1 OP VALUE2) #'(cons OP (list VALUE1 VALUE2))])
-(provide expr)
+(define-syntax-rule (top . ID) (var 'ID))
 
-(define-macro (ident-or-const VALUE) #'VALUE)
-(provide ident-or-const)
+(define (eval op . subexprs)
+  (lambda (nodes queues n-id q-id key)
+    ; apply subfunctions
+    (let* ([args (for/fold ([args null]) ([subexpr subexprs])
+                   (set!-values (nodes queues n-id q-id key) (subexpr nodes queues n-id q-id key))
+                   (append args key))]
+           [args-ids (map (compose node-id (curry hash-ref nodes)) args)]
+           [acc-id (next! n-id)]
+           [acc-node (node acc-id op #f)]
+           [acc-key (string->symbol (string-append op ":" (number->string acc-id)))])
+      (values (hash-set nodes acc-key acc-node)
+              (append queues (map (lambda (id) (queue (next! q-id) id acc-id 1 null)) args-ids))
+              n-id
+              q-id
+              (list acc-key)))))
 
-(define (unary-op op)
-  op)
-(provide unary-op)
+(define (add a b)
+  (eval "+" a b))
 
-(define (binary-op op)
-  op)
-(provide binary-op)
+(define (sub a b)
+  (eval "-" a b))
+
+(define (mul a b)
+  (eval "*" a b))
+
+(define (div a b)
+  (eval "/" a b))
+
+(define (-sqrt a)
+  (eval "sqrt" a))
+
+(define-syntax-rule (module-begin exprs ...)
+  (#%module-begin
+   (let-values ([(nodes queues)
+                 (for/fold ([ns (hash)] [qs null] [n-id 0] [q-id 0] [_ null] #:result (values ns qs))
+                           ([expr (list exprs ...)])
+                   (expr ns qs n-id q-id null))])
+     (writeln (hash->sorted-list nodes node-id))
+     (writeln queues))))
+
+(provide (except-out (all-from-out racket) #%module-begin #%top #%datum + - * / sqrt)
+         (rename-out [module-begin #%module-begin]
+                     [top #%top]
+                     [datum #%datum]
+                     [add +]
+                     [sub -]
+                     [mul *]
+                     [div /]
+                     [-sqrt sqrt]))

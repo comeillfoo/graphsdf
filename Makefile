@@ -11,8 +11,8 @@ TESTSDIR=tests
 SRCDIR=lang
 
 
-SOURCES=$(filter-out $(SRCDIR)/parser.rkt,$(wildcard $(SRCDIR)/*.rkt))
-SOURCES+=$(filter-out $(TESTSDIR)/parser-test.rkt,$(wildcard $(TESTSDIR)/*.rkt))
+SOURCES=$(wildcard $(SRCDIR)/*.rkt)
+SOURCES+=$(wildcard $(TESTSDIR)/*.rkt)
 SOURCES+=backend.rkt
 
 
@@ -32,7 +32,6 @@ lint: $(SOURCES)
 
 
 test:
-	$(RKT) $(TESTSDIR)/parser-test.rkt
 	$(RACO) $(TEST) $(filter-out backend.rkt,$(SOURCES))
 
 

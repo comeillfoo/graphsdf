@@ -1,12 +1,20 @@
 #lang graphsdf
-sqr_b = b * b
-ac = a * c
-temp0 = -4 * ac
-D = sqr_b + temp0
-d = sqrt D
-twice_a = 2 * a
-neg_b = - b
-temp1 = neg_b + d
-temp2 = neg_b - d
-x1 = temp1 / twice_a
-x2 = temp2 / twice_a
+(/
+    (-
+        (sqrt
+            (+
+                (* b b)
+                (* -4 (* a c))))
+        b)
+    (* 2 a))
+
+(/
+    (*
+        -1
+        (+
+            b
+            (sqrt
+                (+
+                    (* b b)
+                    (* -4 (* a c))))))
+    (* 2 a))
